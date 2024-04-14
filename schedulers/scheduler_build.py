@@ -232,3 +232,12 @@ class DPMSolverMultistepScheduler(BaseScheduler):
         
 
 schedulers_build: List[Type[BaseScheduler]] = [DPMSolverMultistepScheduler, PNDMScheduler]
+        
+
+def compute_save_scheduler_consts(artifact_path: str):
+    for scheduler in schedulers_build:
+        jsonstring = json.dumps(scheduler.calculate_constants())
+        filepath = f"{artifact_path}/{scheduler.constants_file_name}"
+        
+        with open(filepath, "w") as outfile:
+            outfile.write(jsonstring)
