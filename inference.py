@@ -103,6 +103,8 @@ def setup_pipeline(args):
     debug_dump_dir = f"{args.artifacts_dir}/debug/" if args.enable_debug else ""
     if debug_dump_dir:
         os.makedirs(debug_dump_dir, exist_ok=True)
+    
+    os.makedirs(args.output_dir, exist_ok=True)
 
     return StableDiffusionPipeline(
         vm=vm,
@@ -141,7 +143,6 @@ def run_inference(args, pipeline):
         writer.close()
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-
     output_path = f"{args.output_dir}/generated_image_{timestamp}.png"
     generated_image.save(output_path)
     print(f"Image generation took {end_time - start_time:.2f} seconds. Output saved to {output_path}")
