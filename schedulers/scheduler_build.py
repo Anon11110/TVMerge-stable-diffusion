@@ -8,22 +8,47 @@ from tvm.script import relax as R
 
 
 class BaseScheduler:
+    """
+    Abstract base class for defining schedulers that compute steps and constants for machine learning models using TVM.
+    """
     constants_file_name: ClassVar[str]
 
     @staticmethod
     def scheduler_steps() -> tvm.IRModule:
+        """
+        Abstract method that should be implemented to define the scheduling steps as a TVM IRModule.
+        """
         raise NotImplementedError()
     
     @staticmethod
     def list_step_functions() -> List[str]:
+        """
+        Abstract method that should list the names of functions involved in the scheduler's steps.
+        """
         raise NotImplementedError()
     
     @staticmethod
     def calculate_constants() -> Dict[str, List[tvm.nd.NDArray]]:
+        """
+        Abstract method that should calculate and return constants used in the scheduler steps.
+        """
         raise NotImplementedError()
 
 
 def calculate_pndm_constants(num_train_timesteps: int, num_inference_steps: int, steps_offset: int, beta_start: float, beta_end: float) -> Dict[str, List[tvm.nd.NDArray]]:
+    """
+    Calculates constants for the PNDM (Probabilistic Neural Decision Model) scheduler.
+    
+    Args:
+    - num_train_timesteps: Total number of training timesteps.
+    - num_inference_steps: Number of inference steps.
+    - steps_offset: Offset applied to the timesteps.
+    - beta_start: Starting beta value for the beta schedule.
+    - beta_end: Ending beta value for the beta schedule.
+
+    Returns:
+    A dictionary containing calculated constants including timesteps, sample coefficients, alpha differences, and model output denominator coefficients.
+    """
     betas = np.linspace(beta_start**0.5, beta_end**0.5, num_train_timesteps, dtype="float32") ** 2
     alphas = 1 - betas
     alphas_cumprod = np.cumprod(alphas, axis=0)
@@ -67,6 +92,10 @@ def calculate_pndm_constants(num_train_timesteps: int, num_inference_steps: int,
 
 
 def get_pndm_step_functions() -> List[Callable]:
+    """
+    Defines and returns a list of callable step functions for the PNDM scheduler.
+    Each function defines a step in the scheduler process, manipulating model outputs based on predefined constants.
+    """
     def step1(mo, *args):
         return mo
     
@@ -86,6 +115,9 @@ def get_pndm_step_functions() -> List[Callable]:
 
 
 def pndm_scheduler_step_wrapper(f_output: Callable):
+    """
+    Wraps a function outputting the next step in a scheduler sequence, integrating additional calculation for the previous sample.
+    """
     def scheduler_step(sample, model_output, sample_coeff, alpha_diff, model_output_denom_coeff, ets0, ets1, ets2, ets3):
         output = f_output(model_output, ets0, ets1, ets2, ets3)
         return compute_previous_sample(sample, output, sample_coeff, alpha_diff, model_output_denom_coeff)
@@ -94,10 +126,16 @@ def pndm_scheduler_step_wrapper(f_output: Callable):
         
         
 def compute_previous_sample(sample, model_output, sample_coeff, alpha_diff, model_output_denom_coeff):
+    """
+    Computes the previous sample based on the current model output and various coefficients.
+    """
     return sample_coeff * sample - alpha_diff * model_output / model_output_denom_coeff
         
         
 def construct_pndm_step_modules(scheduler_step_functions: List[Callable]) -> tvm.IRModule:
+    """
+    Constructs a TVM IRModule consisting of various scheduler steps, defined by the scheduler_step_functions.
+    """
     def emit_step(bb, scheduler_step, idx):
         sample = relax.Var("sample", R.Tensor((1, 4, 64, 64), "float32"))
         model_output = relax.Var("model_output", R.Tensor((1, 4, 64, 64), "float32")) 
@@ -120,6 +158,10 @@ def construct_pndm_step_modules(scheduler_step_functions: List[Callable]) -> tvm
         
 
 class PNDMScheduler(BaseScheduler):
+    """
+    Specific implementation of the BaseScheduler for the PNDM model, defining steps, function names, and constants.
+    """
+
     constants_file_name = "pndm_scheduler_constants.json"
 
     @staticmethod
@@ -137,6 +179,18 @@ class PNDMScheduler(BaseScheduler):
         
 
 def compute_dpm_solver_multistep_scheduler_consts(num_train_timesteps: int, num_inference_steps: int, beta_start: float, beta_end: float) -> Dict[str, List[tvm.nd.NDArray]]:
+    """
+    Calculate constants for the DPM (Diffusion Probabilistic Model) multistep solver scheduler.
+    
+    Args:
+    - num_train_timesteps: The total number of training timesteps for the DPM model.
+    - num_inference_steps: Number of steps used during the inference phase.
+    - beta_start: Initial value of beta in the scheduler.
+    - beta_end: Final value of beta in the scheduler.
+
+    Returns:
+    A dictionary containing timestep-related constants such as alpha values, sigma values, and adjustment coefficients.
+    """
     betas = np.linspace(beta_start**0.5, beta_end**0.5, num_train_timesteps, dtype="float32") ** 2
     alphas = 1 - betas
     alphas_cumprod = np.cumprod(alphas, axis=0)
@@ -175,14 +229,44 @@ def compute_dpm_solver_multistep_scheduler_consts(num_train_timesteps: int, num_
         
 
 def dpm_solver_multistep_convert_model_output(sample, model_output, alpha, sigma):
+    """
+    Converts model output using diffusion probabilistic model solver adjustments.
+    
+    Args:
+    - sample: The current sample tensor.
+    - model_output: Output from the model that needs to be adjusted.
+    - alpha: Alpha values corresponding to current timestep.
+    - sigma: Sigma values corresponding to current timestep.
+
+    Returns:
+    Adjusted model output based on the DPM scheduler's calculations.
+    """
     return (sample - sigma * model_output) / alpha
 
 
 def dpm_solver_multistep_scheduler_step(sample, model_output, last_model_output, c0, c1, c2):
+    """
+    Perform a scheduling step for the DPM solver using multistep adjustments.
+    
+    Args:
+    - sample: The current sample tensor.
+    - model_output: Current output from the model.
+    - last_model_output: Output from the model in the previous step.
+    - c0, c1, c2: Coefficients used for adjustment in the multistep model.
+
+    Returns:
+    The adjusted previous sample based on multistep calculations.
+    """
     return c0 * sample - c1 * model_output - c2 * (model_output - last_model_output)
 
 
 def generate_dpm_solver_multistep_scheduler_steps() -> tvm.IRModule:
+    """
+    Generates an IRModule for the DPM solver multistep scheduler using TVM's relax API.
+    
+    Returns:
+    A TVM IRModule containing all functions related to the DPM multistep scheduler.
+    """
     def emit_convert_model_output(bb):
         sample = relax.Var("sample", R.Tensor((1, 4, 64, 64), "float32"))
         model_output = relax.Var("model_output", R.Tensor((1, 4, 64, 64), "float32"))
@@ -213,6 +297,9 @@ def generate_dpm_solver_multistep_scheduler_steps() -> tvm.IRModule:
             
 
 class DPMSolverMultistepScheduler(BaseScheduler):
+    """
+    Specific implementation of the BaseScheduler for the DPM multistep model, providing steps, function names, and constants.
+    """
     constants_file_name = "dpm_solver_multistep_scheduler_constants.json"
 
     @staticmethod
@@ -230,11 +317,19 @@ class DPMSolverMultistepScheduler(BaseScheduler):
     def calculate_constants() -> Dict[str, List[tvm.nd.NDArray]]:
         return compute_dpm_solver_multistep_scheduler_consts(1000, 20, 0.00085, 0.012)
         
-
+"""
+List of scheduler classes to be built or tested.
+"""
 schedulers_build: List[Type[BaseScheduler]] = [DPMSolverMultistepScheduler, PNDMScheduler]
         
 
 def compute_save_scheduler_consts(artifact_path: str):
+    """
+    Compute and save the constants for all schedulers in the schedulers_build list to the specified directory.
+    
+    Args:
+    - artifact_path: Directory where the scheduler constants JSON files are to be stored.
+    """
     for scheduler in schedulers_build:
         jsonstring = json.dumps(scheduler.calculate_constants())
         filepath = f"{artifact_path}/{scheduler.constants_file_name}"

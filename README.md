@@ -15,6 +15,23 @@ This project optimizes the Stable Diffusion AI model using the [TVM compiler](ht
 
 - **Meta Scheduling**: Utilizes TVM's advanced meta scheduling features to automatically generate efficient schedules for machine learning operations, adapting to the specific characteristics of the target hardware.
 
+##  Project Structure
+- **models/**: Contains the model definitions and transformations necessary for the Stable Diffusion models. These scripts handle the conversion of models into TVM compatible format.
+
+- **schedulers/**: This directory includes the scheduling logic for different parts of the model inference process. Schedulers manage how and when different components of the model are executed during inference.
+
+- **scheduler_db/**: Stores the database files used by TVM's auto-scheduling features to optimize model execution. This database captures performance metrics and tuning parameters to improve execution efficiency.
+
+- **utils/**: Utility functions.
+
+- **build.py**: Script that compiles the models, applying optimizations and preparing them for deployment. This script handles the entire flow from loading models, applying transformations, and saving the compiled artifacts.
+
+- **inference.py**: The main inference script that uses the compiled TVM modules to perform model predictions based on input data. It orchestrates the loading of models, application of schedulers, and execution of the model pipeline.
+
+- **inference_basic_sd.py**: Inference script for a basic, unoptimized implementation of the Diffusers Stable Diffusion pipeline. This script is used primarily for comparison with the optimized versions, allowing users to evaluate the performance enhancements provided by the TVM and custom scheduler integration.
+
+- **requirements.txt**: Lists all Python dependencies required by the project. This file is used to set up the Python environment for development and execution.
+
 
 ## Installation
 

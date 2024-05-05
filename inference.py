@@ -16,6 +16,18 @@ import schedulers
 import datetime
 
 class StableDiffusionPipeline:
+    """
+    A class to encapsulate the Stable Diffusion model along with associated methods
+    to process inputs and generate outputs using a specific scheduler.
+
+    Attributes:
+        vm (relax.VirtualMachine): The TVM virtual machine for executing compiled models.
+        tokenizer (CLIPTokenizer): Tokenizer for processing input text.
+        scheduler (BaseScheduler): Scheduler object to manage the diffusion steps.
+        device: The device on which computations will be performed.
+        params (dict): Dictionary containing parameters for the models.
+        debug_dir (str): Directory path to save debug outputs.
+    """
     def __init__(self, vm, tokenizer, scheduler, device, params, debug_dir):
         self.vm = vm
         self.tokenizer = tokenizer
@@ -36,6 +48,9 @@ class StableDiffusionPipeline:
             np.save(f"{self.debug_dir}/{name}.npy", arr.numpy())
 
     def __call__(self, prompt, negative_prompt=""):
+        """
+        Generate an image based on the provided prompt and optional negative prompt.
+        """
         text_embeddings = []
         for text in [negative_prompt, prompt]:
             input_ids = self.tokenizer(

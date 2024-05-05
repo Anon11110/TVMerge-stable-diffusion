@@ -52,6 +52,14 @@ def load_stable_diffusion_pipeline(args):
 
 
 def trace_models(pipeline, device_str) -> Tuple[tvm.IRModule, Dict[str, List[tvm.nd.NDArray]]]:
+    """
+    Trace different components of the Stable Diffusion pipeline into TVM IRModules.
+    Args:
+        pipeline: The loaded Stable Diffusion pipeline.
+        device_str (str): Device string identifier.
+    Returns:
+        Tuple[tvm.IRModule, Dict[str, List[tvm.nd.NDArray]]]: A tuple of the merged IR module and its parameters.
+    """
     print(f"Tracing CLIP model...")
     clip_trace = model_ir_transforms.convert_clip_to_embeddings(pipeline)
     print(f"Tracing UNet model...")
@@ -78,6 +86,15 @@ def trace_models(pipeline, device_str) -> Tuple[tvm.IRModule, Dict[str, List[tvm
 
 
 def preprocess_module(mod, params, args):
+    """
+    Preprocess the merged IRModule by applying transformations and saving the results.
+    Args:
+        mod (tvm.IRModule): The merged IR module.
+        params (Dict): Parameters associated with the IR module.
+        args (argparse.Namespace): Parsed command-line arguments.
+    Returns:
+        tvm.IRModule: The preprocessed inference module.
+    """
     print(f"Preprocessing module...")
     model_names = ["clip", "unet", "vae"]
     scheduler_func_names = [name for scheduler in schedulers.schedulers_build for name in scheduler.list_step_functions()]
@@ -110,6 +127,14 @@ def dump_debug_script(mod, file_name, args):
 
 
 def apply_meta_schedule_databases(mod, args):
+    """
+    Apply meta scheduling databases to optimize the module.
+    Args:
+        mod (tvm.IRModule): The module to be optimized.
+        args (argparse.Namespace): Parsed command-line arguments.
+    Returns:
+        tvm.IRModule: The optimized module.
+    """
     from tvm import meta_schedule as ms
     databases = [
         (ms.database.create(work_dir=args.database_dir), "softmax2 op"),
@@ -130,6 +155,13 @@ def apply_meta_schedule_databases(mod, args):
 
 
 def adjust_function_attributes(mod):
+    """
+    Adjust the global symbol attributes of functions in the module.
+    Args:
+        mod (tvm.IRModule): The module whose function attributes need adjustment.
+    Returns:
+        tvm.IRModule: The module with adjusted function attributes.
+    """
     print(f"Adjusting function attributes...")
     for gv, func in mod.functions.items():
         try:
@@ -149,6 +181,12 @@ def adjust_function_attributes(mod):
 
 
 def build_model(mod, args):
+    """
+    Build the inference model from the optimized IR module.
+    Args:
+        mod (tvm.IRModule): The optimized IR module.
+        args (argparse.Namespace): Parsed command-line arguments.
+    """
     dump_debug_script(mod, "mod_build_stage.py", args)
     print(f"Building the inference model...")
     ex = relax.build(mod, args.target)
